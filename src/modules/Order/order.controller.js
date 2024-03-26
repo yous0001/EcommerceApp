@@ -7,6 +7,7 @@ import {couponValidation} from '../../utils/coupon.validation.js'
 import { checkProductAvaliability } from '../Cart/utils/check-product.js'
 import { QRCodeGeneration } from '../../utils/qr-code.js'
 import { confirmPaymentIntent, createCheckOutSession, createPaymentIntent, createStripeCoupon, refundPaymentIntent } from '../../PaymentHandler/stripe.js'
+import { createOrderInvoice } from '../services/create-invoice.js'
 
 export const createOrder=async(req,res,next)=>{
     const {product,quantity,couponCode,paymentMethod,phoneNumbers,address,country,postalCode,city}=req.body
@@ -68,8 +69,15 @@ export const createOrder=async(req,res,next)=>{
             await couponUsersModel.updateOne({couponId:coupon._id,userId},{$inc:{usageCount:1}})
         }
 
+        const products=createOrder.orderItems.map(item=>{
+                    return{
+                        price:item.price,
+                        description:item.title,
+                        quantity:item.quantity
+                    }
+                })
+                await createOrderInvoice({products,email:req.authUser.email,name:req.authUser.username})
     const orderqr=await QRCodeGeneration({orderStatus,orderId:createOrder._id})
-    
     res.status(201).json({message:"order Created successfully",createOrder,orderqr})
 
     
@@ -179,7 +187,7 @@ export const paymentWithStripe=async(req,res,next)=>{
     
     const paymentObj={
         customer_email:req.authUser.email,
-        metadata:{orderId:order._id.toString()},
+        metadata:{orderId:order._id.toString(),userId:userId.toString()},
         discounts:[],
         line_items:order.orderItems.map(item=>{
             return{
@@ -232,3 +240,21 @@ export const refundOrder=async(req,res,next)=>{
 
     res.status(200).json({message:"order refund successfully",order:refund})
 }
+
+
+// app.use('/success',async function(){
+//     const stripe=new Stripe(process.env.stripe_key)
+//     const order_id = await stripe.payment_intent['metadata'].get('order_id')
+//     const userId = await stripe.payment_intent['metadata'].get('userId')
+//     const order =await orderModel.findById(order_id)
+//     const user=await userModel.findById(userId)
+//     const products=order.orderItems.map(item=>{
+//         return{
+//             price:item.price,
+//             description:item.title,
+//             quantity:item.quantity
+//         }
+//     })
+//     await createOrderInvoice({products,email:user.email,name:user.username})
+//     res.status(200).json({message:"payment success"})
+// })
